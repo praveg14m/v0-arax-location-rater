@@ -1,16 +1,17 @@
 export default function Home() {
   return (
-    <div className="flex min-h-screen items-center justify-center font-sans">
-      <main className="flex w-full max-w-3xl flex-col items-center gap-8 px-6 py-16 text-center sm:items-start sm:text-left">
-        <div className="flex flex-col gap-4">
-          <h1 className="text-4xl font-bold tracking-tight">
-            Arax Properties
-          </h1>
-          <p className="max-w-md text-lg text-muted-foreground">
-            To get started, send a prompt or modify this page directly.
-          </p>
-        </div>
-      </main>
-    </div>
-  );
+    <main className="min-h-screen">
+      <div className="mx-auto max-w-5xl px-8 py-24">
+        <p className="eyebrow mb-6">Arax Properties · Internal Tool</p>
+        <h1 className="font-serif text-5xl tracking-tight" style={{ color: "var(--color-navy)" }}>
+          Location Rater
+        </h1>
+        <div className="mt-6 h-px w-16" style={{ backgroundColor: "var(--color-bronze)" }} />
+        <p className="mt-8 max-w-xl text-[15px] leading-relaxed" style={{ color: "var(--color-body)" }}>
+          Project scaffold ready. Design tokens, typography, Python serverless function routing, and Vercel Blob
+          storage are configured. Awaiting next instruction to build the upload-and-score workflow.
+        </p>
+      </div>
+    </main>
+  )
 }
