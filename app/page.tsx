@@ -1,13 +1,15 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { TopBar } from "@/components/arax/top-bar"
 import { StateUpload } from "@/components/arax/state-upload"
 import { StateProcessing } from "@/components/arax/state-processing"
 import { StateReview } from "@/components/arax/state-review"
 import { StateComplete } from "@/components/arax/state-complete"
-import type { StatusResponse } from "@/lib/arax/types"
+import { ErrorBanner } from "@/components/arax/error-banner"
+import { useJobStatus } from "@/hooks/use-job-status"
+import { ApiError, confirmReview } from "@/lib/api-client"
 
 type View = "upload" | "processing" | "review" | "complete"
 
@@ -15,74 +17,49 @@ export default function Home() {
   const [view, setView] = useState<View>("upload")
   const [jobId, setJobId] = useState<string | null>(null)
   const [dealName, setDealName] = useState<string>("")
-  const [status, setStatus] = useState<StatusResponse | null>(null)
   const [finalizing, setFinalizing] = useState(false)
-  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const cancelled = useRef(false)
+  const [pollPaused, setPollPaused] = useState(false)
+  const [bannerDismissed, setBannerDismissed] = useState(false)
 
-  const stopPolling = useCallback(() => {
-    if (pollTimer.current) {
-      clearTimeout(pollTimer.current)
-      pollTimer.current = null
+  // Stop polling once we leave the processing screen — the review screen reads
+  // the snapshot already in `status`, and `complete` does the same. We resume
+  // polling after `confirm` to drive the writing → complete transition.
+  const paused = pollPaused || (view !== "processing")
+  const { status, error: pollError } = useJobStatus(jobId, { paused })
+
+  // Drive view transitions from polled status.
+  useEffect(() => {
+    if (!status || view !== "processing") return
+    if (status.status === "failed") {
+      toast.error(status.error || "Job failed.", {
+        action: { label: "Start over", onClick: () => reset() },
+      })
+      setPollPaused(true)
+      return
     }
-  }, [])
+    if (status.status === "review_required") {
+      setView("review")
+    } else if (status.status === "complete") {
+      setView("complete")
+    }
+    // We intentionally exclude `reset` from deps; it's stable below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, view])
 
   const reset = useCallback(() => {
-    stopPolling()
-    cancelled.current = false
     setJobId(null)
     setDealName("")
-    setStatus(null)
     setFinalizing(false)
+    setPollPaused(false)
+    setBannerDismissed(false)
     setView("upload")
-  }, [stopPolling])
-
-  // Polling loop — runs whenever a job is in flight and we are on the
-  // processing screen. The review and complete screens read straight from
-  // `status` (populated by the most recent poll).
-  useEffect(() => {
-    if (!jobId) return
-    if (view !== "processing") return
-
-    cancelled.current = false
-
-    const poll = async () => {
-      if (cancelled.current) return
-      try {
-        const res = await fetch(`/api/status?job_id=${encodeURIComponent(jobId)}`, { cache: "no-store" })
-        if (!res.ok) {
-          toast.error(`Status check failed (${res.status}).`)
-        } else {
-          const data = (await res.json()) as StatusResponse
-          setStatus(data)
-          if (data.status === "failed") {
-            toast.error(data.error || "Job failed.")
-            return
-          } else if (data.status === "review_required") {
-            setView("review")
-            return
-          } else if (data.status === "complete") {
-            setView("complete")
-            return
-          }
-        }
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Network error while polling.")
-      }
-      pollTimer.current = setTimeout(poll, 2000)
-    }
-
-    poll()
-    return () => {
-      cancelled.current = true
-      stopPolling()
-    }
-  }, [jobId, view, stopPolling])
+  }, [])
 
   const onJobStarted = useCallback((id: string, name: string) => {
     setJobId(id)
     setDealName(name)
-    setStatus(null)
+    setPollPaused(false)
+    setBannerDismissed(false)
     setView("processing")
   }, [])
 
@@ -96,31 +73,46 @@ export default function Home() {
       if (!jobId) return
       setFinalizing(true)
       try {
-        const res = await fetch("/api/confirm", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ job_id: jobId, city_overrides: cityOverrides }),
-        })
-        if (!res.ok) {
-          const txt = await res.text().catch(() => "")
-          toast.error(txt || `Finalize failed (${res.status}).`)
-          setFinalizing(false)
-          return
-        }
+        await confirmReview({ jobId, cityOverrides })
         // Resume polling — backend will progress through "writing" -> "complete".
+        setPollPaused(false)
         setFinalizing(false)
         setView("processing")
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Network error.")
+        const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Network error."
+        toast.error(msg)
         setFinalizing(false)
       }
     },
     [jobId],
   )
 
+  const onRetryPolling = useCallback(() => {
+    setBannerDismissed(false)
+    // Force a fresh polling cycle by toggling pause.
+    setPollPaused(true)
+    setTimeout(() => setPollPaused(false), 0)
+  }, [])
+
+  const showBanner = !!pollError && !bannerDismissed && view !== "upload"
+  const bannerMessage = pollError
+    ? pollError.code === "not_found"
+      ? "Job not found. The function instance may have restarted — please start over."
+      : pollError.code === "server"
+        ? `Server error while checking job status: ${pollError.message}`
+        : "Server unreachable. Check your connection and retry."
+    : ""
+
   return (
     <div className="min-h-screen">
       <TopBar />
+      {showBanner && (
+        <ErrorBanner
+          message={bannerMessage}
+          onRetry={pollError?.code === "not_found" ? reset : onRetryPolling}
+          onDismiss={() => setBannerDismissed(true)}
+        />
+      )}
       {view === "upload" && <StateUpload onJobStarted={onJobStarted} />}
       {view === "processing" && <StateProcessing dealName={dealName} status={status} />}
       {view === "review" && status?.review_data && (
@@ -133,12 +125,7 @@ export default function Home() {
         />
       )}
       {view === "complete" && jobId && status?.result && (
-        <StateComplete
-          jobId={jobId}
-          dealName={dealName}
-          result={status.result}
-          onReset={reset}
-        />
+        <StateComplete jobId={jobId} dealName={dealName} result={status.result} onReset={reset} />
       )}
     </div>
   )

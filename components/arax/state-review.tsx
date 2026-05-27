@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { Loader2 } from "lucide-react"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -323,7 +324,7 @@ export function StateReview({ dealName, review, onCancel, onFinalize, finalizing
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-[4px] border px-6 py-3 text-[13px] font-semibold tracking-[0.15em] uppercase transition-colors hover:bg-white"
+          className="rounded-[4px] border px-6 py-3 text-[13px] font-semibold tracking-[0.15em] uppercase transition-colors hover:bg-white focus-visible:ring-2 focus-visible:ring-[var(--color-bronze)] focus-visible:outline-none"
           style={{ borderColor: "var(--color-rule)", color: "var(--color-navy)" }}
         >
           Cancel
@@ -337,10 +338,18 @@ export function StateReview({ dealName, review, onCancel, onFinalize, finalizing
                   type="button"
                   onClick={handleFinalize}
                   disabled={!allUnmatchedResolved || finalizing}
-                  className="rounded-[4px] px-6 py-3 text-[13px] font-semibold tracking-[0.15em] uppercase transition-colors focus:ring-2 focus:ring-[var(--color-bronze)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-busy={finalizing}
+                  className="inline-flex items-center justify-center gap-2 rounded-[4px] px-6 py-3 text-[13px] font-semibold tracking-[0.15em] uppercase transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-bronze)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
                   style={{ backgroundColor: "var(--color-navy)", color: "var(--color-white)" }}
                 >
-                  Finalize and generate workbook
+                  {finalizing ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" aria-hidden />
+                      <span>Finalizing...</span>
+                    </>
+                  ) : (
+                    "Finalize and generate workbook"
+                  )}
                 </button>
               </span>
             </TooltipTrigger>

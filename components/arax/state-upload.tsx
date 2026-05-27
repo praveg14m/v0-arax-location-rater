@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react"
 import { toast } from "sonner"
 import { FileText, Loader2, Upload } from "lucide-react"
+import { ApiError, uploadRentRoll } from "@/lib/api-client"
 
 const MAX_BYTES = 4 * 1024 * 1024 // 4 MB
 const ACCEPTED_EXT = [".xlsx", ".xlsm"]
@@ -18,6 +19,7 @@ export function StateUpload({ onJobStarted }: Props) {
   const [dragOver, setDragOver] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const dropzoneRef = useRef<HTMLDivElement>(null)
 
   const validateAndSetFile = useCallback((f: File | null) => {
     if (!f) {
@@ -34,7 +36,7 @@ export function StateUpload({ onJobStarted }: Props) {
     }
     if (f.size > MAX_BYTES) {
       setFile(f)
-      setFileError("File exceeds 4MB limit. Vercel serverless functions cap upload bodies at this size.")
+      setFileError("File exceeds 4MB. Please contact engineering for large-portfolio support.")
       return
     }
     setFile(f)
@@ -53,30 +55,16 @@ export function StateUpload({ onJobStarted }: Props) {
     if (!dealName.trim() || !file || fileError) return
     setSubmitting(true)
     try {
-      const fd = new FormData()
-      fd.append("file", file)
-      fd.append("deal_name", dealName.trim())
-      const res = await fetch("/api/process", { method: "POST", body: fd })
-      if (res.status === 413) {
-        toast.error("File too large. The upload limit is 4MB. Please contact engineering for large-portfolio support.")
-        setSubmitting(false)
-        return
-      }
-      if (!res.ok) {
-        const text = await res.text().catch(() => "")
-        toast.error(text || `Request failed (${res.status}).`)
-        setSubmitting(false)
-        return
-      }
-      const data = (await res.json()) as { job_id: string; status: string }
-      if (!data?.job_id) {
-        toast.error("Server did not return a job id.")
-        setSubmitting(false)
-        return
-      }
+      const data = await uploadRentRoll({ file, dealName: dealName.trim() })
       onJobStarted(data.job_id, dealName.trim())
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Network error. Please retry.")
+      if (err instanceof ApiError && err.code === "too_large") {
+        toast.error("File exceeds 4MB. Please contact engineering for large-portfolio support.")
+      } else if (err instanceof ApiError) {
+        toast.error(err.message)
+      } else {
+        toast.error(err instanceof Error ? err.message : "Network error. Please retry.")
+      }
       setSubmitting(false)
     }
   }
@@ -107,18 +95,23 @@ export function StateUpload({ onJobStarted }: Props) {
         </label>
         <input
           id="deal-name"
+          name="deal-name"
           type="text"
           required
+          autoComplete="off"
           value={dealName}
           onChange={(e) => setDealName(e.target.value)}
           placeholder="e.g. Project Falcon"
-          className="w-full rounded-[4px] border bg-white px-3 py-2.5 text-[15px] outline-none transition-colors focus:border-[var(--color-navy)] focus:ring-2 focus:ring-[var(--color-bronze)]/40"
+          className="w-full rounded-[4px] border bg-white px-3 py-2.5 text-[15px] outline-none transition-colors focus:border-[var(--color-navy)] focus-visible:ring-2 focus-visible:ring-[var(--color-bronze)]"
           style={{ borderColor: "var(--color-rule)", color: "var(--color-body)" }}
         />
 
         {/* Rent roll dropzone */}
-        <label className="eyebrow mt-7 mb-3 block">Rent roll</label>
+        <label htmlFor="rent-roll-input" className="eyebrow mt-7 mb-3 block">
+          Rent roll
+        </label>
         <div
+          ref={dropzoneRef}
           onClick={() => inputRef.current?.click()}
           onDragOver={(e) => {
             e.preventDefault()
@@ -128,10 +121,15 @@ export function StateUpload({ onJobStarted }: Props) {
           onDrop={onDrop}
           role="button"
           tabIndex={0}
+          aria-label="Upload rent roll. Click or press Enter to browse, or drop a file. Accepted formats: .xlsx, .xlsm. Maximum size: 4 megabytes."
+          aria-describedby="rent-roll-help"
           onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") inputRef.current?.click()
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault()
+              inputRef.current?.click()
+            }
           }}
-          className="flex cursor-pointer flex-col items-center justify-center rounded-[4px] border-2 border-dashed bg-white px-6 py-10 text-center transition-colors"
+          className="flex cursor-pointer flex-col items-center justify-center rounded-[4px] border-2 border-dashed bg-white px-6 py-10 text-center transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-bronze)] focus-visible:outline-none"
           style={{
             borderColor: dragOver ? "var(--color-navy)" : "var(--color-bronze)",
             backgroundColor: dragOver ? "rgba(140,123,92,0.06)" : "#ffffff",
@@ -139,15 +137,17 @@ export function StateUpload({ onJobStarted }: Props) {
         >
           <input
             ref={inputRef}
+            id="rent-roll-input"
+            name="rent-roll-input"
             type="file"
             accept=".xlsx,.xlsm"
-            className="hidden"
+            className="sr-only"
             onChange={(e) => validateAndSetFile(e.target.files?.[0] ?? null)}
           />
           {file ? (
             <div className="flex w-full items-center justify-between gap-4">
               <div className="flex min-w-0 items-center gap-3">
-                <FileText size={20} style={{ color: "var(--color-bronze)" }} />
+                <FileText size={20} aria-hidden style={{ color: "var(--color-bronze)" }} />
                 <div className="min-w-0 text-left">
                   <p className="truncate text-[14px] font-medium" style={{ color: "var(--color-navy)" }}>
                     {file.name}
@@ -165,7 +165,7 @@ export function StateUpload({ onJobStarted }: Props) {
                   if (inputRef.current) inputRef.current.value = ""
                   setTimeout(() => inputRef.current?.click(), 0)
                 }}
-                className="text-[13px] font-medium underline-offset-4 hover:underline"
+                className="rounded-[3px] text-[13px] font-medium underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-[var(--color-bronze)] focus-visible:outline-none"
                 style={{ color: "var(--color-bronze)" }}
               >
                 Replace
@@ -173,18 +173,18 @@ export function StateUpload({ onJobStarted }: Props) {
             </div>
           ) : (
             <>
-              <Upload size={22} style={{ color: "var(--color-bronze)" }} />
+              <Upload size={22} aria-hidden style={{ color: "var(--color-bronze)" }} />
               <p className="mt-3 text-[14px]" style={{ color: "var(--color-body)" }}>
                 Drag and drop your rent roll, or click to browse
               </p>
-              <p className="mt-1 text-[12px]" style={{ color: "var(--color-muted)" }}>
+              <p id="rent-roll-help" className="mt-1 text-[12px]" style={{ color: "var(--color-muted)" }}>
                 Accepted formats: .xlsx, .xlsm · Maximum size: 4 MB
               </p>
             </>
           )}
         </div>
         {fileError && (
-          <p className="mt-2 text-[13px]" style={{ color: "var(--color-danger)" }}>
+          <p role="alert" className="mt-2 text-[13px]" style={{ color: "var(--color-danger)" }}>
             {fileError}
           </p>
         )}
@@ -193,13 +193,14 @@ export function StateUpload({ onJobStarted }: Props) {
         <button
           type="submit"
           disabled={!formValid || submitting}
-          className="mt-8 flex w-full items-center justify-center gap-2 rounded-[4px] py-3 text-[13px] font-semibold tracking-[0.15em] uppercase transition-colors focus:ring-2 focus:ring-[var(--color-bronze)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+          aria-busy={submitting}
+          className="mt-8 flex w-full items-center justify-center gap-2 rounded-[4px] py-3 text-[13px] font-semibold tracking-[0.15em] uppercase transition-colors focus-visible:ring-2 focus-visible:ring-[var(--color-bronze)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
           style={{ backgroundColor: "var(--color-navy)", color: "var(--color-white)" }}
         >
           {submitting ? (
             <>
-              <Loader2 size={16} className="animate-spin" />
-              Uploading and starting job...
+              <Loader2 size={16} className="animate-spin" aria-hidden />
+              <span>Uploading and starting job...</span>
             </>
           ) : (
             "Generate Ratings"
