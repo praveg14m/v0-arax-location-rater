@@ -8,8 +8,9 @@ export default function Home() {
         </h1>
         <div className="mt-6 h-px w-16" style={{ backgroundColor: "var(--color-bronze)" }} />
         <p className="mt-8 max-w-xl text-[15px] leading-relaxed" style={{ color: "var(--color-body)" }}>
-          Project scaffold ready. Design tokens, typography, Python serverless function routing, and Vercel Blob
-          storage are configured. Awaiting next instruction to build the upload-and-score workflow.
+          Project scaffold ready. Design tokens, typography, and Python serverless function routing are configured.
+          Files will be sent directly to the Python function as multipart form data. Awaiting next instruction to
+          build the upload-and-score workflow.
         </p>
       </div>
     </main>
