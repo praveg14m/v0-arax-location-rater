@@ -1,18 +1,17 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { ChevronDown } from "lucide-react"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import type { ReviewPayload } from "@/lib/arax/types"
+import type { ReviewData } from "@/lib/arax/types"
 
 const eur = (n: number) =>
   new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n)
 
 type Props = {
   dealName: string
-  review: ReviewPayload
+  review: ReviewData
   onCancel: () => void
   onFinalize: (cityOverrides: Record<string, string>) => void
   finalizing?: boolean
@@ -21,32 +20,34 @@ type Props = {
 const KEEP_AS_IS = "__keep_as_is__"
 
 export function StateReview({ dealName, review, onCancel, onFinalize, finalizing }: Props) {
+  const { cities, inherited_adjustments, walk_score_summary } = review
+
   // Fuzzy: default to proposed match
   const [fuzzyOverrides, setFuzzyOverrides] = useState<Record<string, string>>(() =>
-    Object.fromEntries(review.fuzzy_matches.map((f) => [f.raw_city, f.proposed_match])),
+    Object.fromEntries(cities.fuzzy_matches.map((f) => [f.raw, f.proposed])),
   )
   // Unmatched: no default
   const [unmatchedSelections, setUnmatchedSelections] = useState<Record<string, string>>({})
 
   const allUnmatchedResolved = useMemo(
-    () => review.unmatched_cities.every((u) => !!unmatchedSelections[u.raw_city]),
-    [review.unmatched_cities, unmatchedSelections],
+    () => cities.unmatched.every((u) => !!unmatchedSelections[u.raw]),
+    [cities.unmatched, unmatchedSelections],
   )
 
-  const exactCount = review.exact_matches.length
-  const fuzzyCount = review.fuzzy_matches.length
-  const unmatchedCount = review.unmatched_cities.length
+  const exactCount = cities.exact_matches.length
+  const fuzzyCount = cities.fuzzy_matches.length
+  const unmatchedCount = cities.unmatched.length
 
   const handleFinalize = () => {
     if (!allUnmatchedResolved || finalizing) return
     const overrides: Record<string, string> = {}
-    for (const f of review.fuzzy_matches) {
-      const v = fuzzyOverrides[f.raw_city]
-      if (v && v !== KEEP_AS_IS) overrides[f.raw_city] = v
+    for (const f of cities.fuzzy_matches) {
+      const v = fuzzyOverrides[f.raw]
+      if (v && v !== KEEP_AS_IS) overrides[f.raw] = v
     }
-    for (const u of review.unmatched_cities) {
-      const v = unmatchedSelections[u.raw_city]
-      if (v) overrides[u.raw_city] = v
+    for (const u of cities.unmatched) {
+      const v = unmatchedSelections[u.raw]
+      if (v) overrides[u.raw] = v
     }
     onFinalize(overrides)
   }
@@ -54,7 +55,10 @@ export function StateReview({ dealName, review, onCancel, onFinalize, finalizing
   return (
     <main className="mx-auto w-full max-w-[1040px] px-6 pt-12 pb-24">
       <p className="eyebrow mb-5">Review — {dealName.toUpperCase()}</p>
-      <h1 className="font-serif text-balance text-4xl leading-[1.15] sm:text-5xl" style={{ color: "var(--color-navy)" }}>
+      <h1
+        className="font-serif text-balance text-4xl leading-[1.15] sm:text-5xl"
+        style={{ color: "var(--color-navy)" }}
+      >
         Confirm ratings before finalizing
       </h1>
       <p className="mt-4 max-w-[70ch] text-[15px] leading-relaxed" style={{ color: "var(--color-muted)" }}>
@@ -71,18 +75,15 @@ export function StateReview({ dealName, review, onCancel, onFinalize, finalizing
             City matches
           </h2>
           <div className="flex flex-wrap gap-2">
-            <KpiBadge label={`✓ ${exactCount} exact`} tone="success" />
-            <KpiBadge label={`! ${fuzzyCount} fuzzy`} tone="warning" />
-            {unmatchedCount > 0 && <KpiBadge label={`✗ ${unmatchedCount} unmatched`} tone="danger" />}
+            <KpiBadge label={`${exactCount} exact`} tone="success" />
+            <KpiBadge label={`${fuzzyCount} fuzzy`} tone="warning" />
+            {unmatchedCount > 0 && <KpiBadge label={`${unmatchedCount} unmatched`} tone="danger" />}
           </div>
         </div>
 
         <Accordion
           type="multiple"
-          defaultValue={[
-            "fuzzy",
-            ...(unmatchedCount > 0 ? ["unmatched"] : []),
-          ]}
+          defaultValue={["fuzzy", ...(unmatchedCount > 0 ? ["unmatched"] : [])]}
           className="mt-5"
         >
           {/* Exact */}
@@ -96,10 +97,10 @@ export function StateReview({ dealName, review, onCancel, onFinalize, finalizing
             <AccordionContent>
               <ReviewTable
                 head={["Raw city", "Mapped to", "Addresses", "Annual rent (€)"]}
-                rows={review.exact_matches.map((m) => [
-                  m.raw_city,
-                  m.mapped_to,
-                  String(m.addresses),
+                rows={cities.exact_matches.map((m) => [
+                  m.raw,
+                  m.mapped,
+                  m.address_count.toString(),
                   eur(m.annual_rent),
                 ])}
                 rightAlignCols={[2, 3]}
@@ -129,10 +130,10 @@ export function StateReview({ dealName, review, onCancel, onFinalize, finalizing
                     </tr>
                   </thead>
                   <tbody>
-                    {review.fuzzy_matches.map((f) => (
-                      <tr key={f.raw_city} className="border-t" style={{ borderColor: "var(--color-rule)" }}>
-                        <Td>{f.raw_city}</Td>
-                        <Td>{f.proposed_match}</Td>
+                    {cities.fuzzy_matches.map((f) => (
+                      <tr key={f.raw} className="border-t" style={{ borderColor: "var(--color-rule)" }}>
+                        <Td>{f.raw}</Td>
+                        <Td>{f.proposed}</Td>
                         <Td>
                           <span
                             className="inline-flex items-center rounded-[3px] px-2 py-0.5 text-[12px] font-medium"
@@ -146,16 +147,14 @@ export function StateReview({ dealName, review, onCancel, onFinalize, finalizing
                         </Td>
                         <Td>
                           <Select
-                            value={fuzzyOverrides[f.raw_city]}
-                            onValueChange={(v) =>
-                              setFuzzyOverrides((s) => ({ ...s, [f.raw_city]: v }))
-                            }
+                            value={fuzzyOverrides[f.raw]}
+                            onValueChange={(v) => setFuzzyOverrides((s) => ({ ...s, [f.raw]: v }))}
                           >
                             <SelectTrigger className="h-9 min-w-[200px] bg-white text-[14px]">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {[f.proposed_match, ...f.candidates.filter((c) => c !== f.proposed_match)]
+                              {[f.proposed, ...f.alternatives.filter((c) => c !== f.proposed)]
                                 .slice(0, 5)
                                 .map((c) => (
                                   <SelectItem key={c} value={c}>
@@ -166,7 +165,7 @@ export function StateReview({ dealName, review, onCancel, onFinalize, finalizing
                             </SelectContent>
                           </Select>
                         </Td>
-                        <Td align="right">{f.addresses}</Td>
+                        <Td align="right">{f.address_count}</Td>
                         <Td align="right">{eur(f.annual_rent)}</Td>
                       </tr>
                     ))}
@@ -197,15 +196,13 @@ export function StateReview({ dealName, review, onCancel, onFinalize, finalizing
                       </tr>
                     </thead>
                     <tbody>
-                      {review.unmatched_cities.map((u) => (
-                        <tr key={u.raw_city} className="border-t" style={{ borderColor: "var(--color-rule)" }}>
-                          <Td>{u.raw_city}</Td>
+                      {cities.unmatched.map((u) => (
+                        <tr key={u.raw} className="border-t" style={{ borderColor: "var(--color-rule)" }}>
+                          <Td>{u.raw}</Td>
                           <Td>
                             <Select
-                              value={unmatchedSelections[u.raw_city] ?? ""}
-                              onValueChange={(v) =>
-                                setUnmatchedSelections((s) => ({ ...s, [u.raw_city]: v }))
-                              }
+                              value={unmatchedSelections[u.raw] ?? ""}
+                              onValueChange={(v) => setUnmatchedSelections((s) => ({ ...s, [u.raw]: v }))}
                             >
                               <SelectTrigger className="h-9 min-w-[220px] bg-white text-[14px]">
                                 <SelectValue placeholder="Choose a match..." />
@@ -219,7 +216,7 @@ export function StateReview({ dealName, review, onCancel, onFinalize, finalizing
                               </SelectContent>
                             </Select>
                           </Td>
-                          <Td align="right">{u.addresses}</Td>
+                          <Td align="right">{u.address_count}</Td>
                           <Td align="right">{eur(u.annual_rent)}</Td>
                         </tr>
                       ))}
@@ -241,10 +238,10 @@ export function StateReview({ dealName, review, onCancel, onFinalize, finalizing
           Inherited adjustments
         </h2>
         <p className="mt-1 text-[14px]" style={{ color: "var(--color-muted)" }}>
-          {review.inherited.length} cities have ratings from prior deals. These will appear in blue in the workbook.
+          {inherited_adjustments.length} cities have ratings from prior deals. These will appear in blue in the workbook.
         </p>
 
-        {review.inherited.length > 0 ? (
+        {inherited_adjustments.length > 0 ? (
           <div className="mt-5 overflow-x-auto">
             <table className="w-full text-[14px]">
               <thead>
@@ -256,16 +253,20 @@ export function StateReview({ dealName, review, onCancel, onFinalize, finalizing
                 </tr>
               </thead>
               <tbody>
-                {review.inherited.map((r) => (
-                  <tr key={`${r.city}-${r.from_deal}`} className="border-t" style={{ borderColor: "var(--color-rule)" }}>
+                {inherited_adjustments.map((r) => (
+                  <tr
+                    key={`${r.city}-${r.source_deal}`}
+                    className="border-t"
+                    style={{ borderColor: "var(--color-rule)" }}
+                  >
                     <Td>{r.city}</Td>
                     <Td align="right">
                       <span style={{ color: "#0066CC", fontVariantNumeric: "tabular-nums" }}>
-                        {r.adjustment.toFixed(1)}
+                        {r.value.toFixed(1)}
                       </span>
                     </Td>
-                    <Td>{r.from_deal}</Td>
-                    <Td>{new Date(r.date_rated).toLocaleDateString("en-IE")}</Td>
+                    <Td>{r.source_deal}</Td>
+                    <Td>{new Date(r.date).toLocaleDateString("en-IE")}</Td>
                   </tr>
                 ))}
               </tbody>
@@ -288,28 +289,28 @@ export function StateReview({ dealName, review, onCancel, onFinalize, finalizing
         </h2>
 
         <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <KpiTile label="Streets scored" value={review.walkscore.streets_scored.toString()} />
-          <KpiTile label="Average score" value={review.walkscore.average_score.toFixed(0)} />
+          <KpiTile label="Streets scored" value={walk_score_summary.streets_scored.toString()} />
+          <KpiTile label="Average score" value={walk_score_summary.average_score.toFixed(0)} />
           <KpiTile
             label="Failed to score"
-            value={review.walkscore.failed.toString()}
-            danger={review.walkscore.failed > 0}
+            value={walk_score_summary.failed.length.toString()}
+            danger={walk_score_summary.failed.length > 0}
           />
         </div>
 
-        {review.walkscore.failed > 0 && (
+        {walk_score_summary.failed.length > 0 && (
           <Accordion type="single" collapsible className="mt-6">
             <AccordionItem value="failures" className="border-b-0">
               <AccordionTrigger className="py-3 hover:no-underline">
                 <span className="text-[14px]" style={{ color: "var(--color-body)" }}>
                   View failures{" "}
-                  <span style={{ color: "var(--color-muted)" }}>({review.walkscore.failures.length})</span>
+                  <span style={{ color: "var(--color-muted)" }}>({walk_score_summary.failed.length})</span>
                 </span>
               </AccordionTrigger>
               <AccordionContent>
                 <ReviewTable
                   head={["Address", "City", "Reason"]}
-                  rows={review.walkscore.failures.map((f) => [f.address, f.city, f.reason])}
+                  rows={walk_score_summary.failed.map((f) => [f.address, f.city, f.reason])}
                 />
               </AccordionContent>
             </AccordionItem>
@@ -374,10 +375,7 @@ function KpiBadge({ label, tone }: { label: string; tone: "success" | "warning" 
 
 function KpiTile({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
   return (
-    <div
-      className="rounded-[4px] border bg-white p-5"
-      style={{ borderColor: "var(--color-rule)" }}
-    >
+    <div className="rounded-[4px] border bg-white p-5" style={{ borderColor: "var(--color-rule)" }}>
       <p
         className="font-serif text-[32px] leading-none"
         style={{
@@ -394,7 +392,9 @@ function KpiTile({ label, value, danger }: { label: string; value: string; dange
 
 function Th({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
   return (
-    <th className={`pb-2 pr-4 text-[12px] font-semibold tracking-wider uppercase ${align === "right" ? "text-right" : ""}`}>
+    <th
+      className={`pb-2 pr-4 text-[12px] font-semibold tracking-wider uppercase ${align === "right" ? "text-right" : ""}`}
+    >
       {children}
     </th>
   )
@@ -449,6 +449,3 @@ function ReviewTable({
     </div>
   )
 }
-
-// Suppress unused warning for ChevronDown (kept for potential future use in custom triggers)
-void ChevronDown

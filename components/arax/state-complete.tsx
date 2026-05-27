@@ -1,12 +1,12 @@
 "use client"
 
 import { CheckCircle2 } from "lucide-react"
-import type { RunSummary } from "@/lib/arax/types"
+import type { JobResult } from "@/lib/arax/types"
 
 type Props = {
   jobId: string
-  filename: string
-  summary: RunSummary
+  dealName: string
+  result: JobResult
   onReset: () => void
 }
 
@@ -17,7 +17,8 @@ const fmtDuration = (s: number) => {
   return `${m}m ${r}s`
 }
 
-export function StateComplete({ jobId, filename, summary, onReset }: Props) {
+export function StateComplete({ jobId, dealName, result, onReset }: Props) {
+  const { workbook_filename, run_summary } = result
   return (
     <main className="mx-auto w-full max-w-[720px] px-6 pt-16 pb-24">
       <div className="flex flex-col items-center text-center">
@@ -28,11 +29,8 @@ export function StateComplete({ jobId, filename, summary, onReset }: Props) {
         >
           Workbook ready
         </h1>
-        <p
-          className="mt-5 font-medium tracking-tight text-[15px]"
-          style={{ color: "var(--color-body)" }}
-        >
-          {filename}
+        <p className="mt-5 font-medium tracking-tight text-[15px]" style={{ color: "var(--color-body)" }}>
+          {workbook_filename}
         </p>
 
         <a
@@ -50,15 +48,15 @@ export function StateComplete({ jobId, filename, summary, onReset }: Props) {
       >
         <p className="eyebrow mb-5">Run summary</p>
         <dl className="grid grid-cols-1 gap-y-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <Row k="Deal name" v={summary.deal_name} />
-          <Row k="Cities scored" v={summary.cities_scored.toString()} />
-          <Row k="Unique streets called" v={summary.unique_streets_called.toString()} />
+          <Row k="Deal name" v={dealName} />
+          <Row k="Cities scored" v={run_summary.cities_scored.toString()} />
+          <Row k="Unique streets called" v={run_summary.unique_streets.toString()} />
           <Row
             k="Walk Score successes / failures"
-            v={`${summary.walkscore_successes} / ${summary.walkscore_failures}`}
+            v={`${run_summary.walk_score_successes} / ${run_summary.walk_score_failures}`}
           />
-          <Row k="Prior adjustments inherited" v={summary.prior_adjustments_inherited.toString()} />
-          <Row k="Total processing time" v={fmtDuration(summary.total_processing_time_seconds)} />
+          <Row k="Prior adjustments inherited" v={run_summary.inherited_adjustments.toString()} />
+          <Row k="Total processing time" v={fmtDuration(run_summary.processing_time_seconds)} />
         </dl>
 
         <div className="mt-6 border-t pt-4" style={{ borderColor: "var(--color-rule)" }}>

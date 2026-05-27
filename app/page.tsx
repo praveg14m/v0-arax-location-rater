@@ -37,7 +37,9 @@ export default function Home() {
     setView("upload")
   }, [stopPolling])
 
-  // Polling loop — driven by jobId and current view
+  // Polling loop — runs whenever a job is in flight and we are on the
+  // processing screen. The review and complete screens read straight from
+  // `status` (populated by the most recent poll).
   useEffect(() => {
     if (!jobId) return
     if (view !== "processing") return
@@ -53,9 +55,9 @@ export default function Home() {
         } else {
           const data = (await res.json()) as StatusResponse
           setStatus(data)
-          if (data.status === "error") {
+          if (data.status === "failed") {
             toast.error(data.error || "Job failed.")
-            // remain on processing view; user can hit Start over via toast pattern in future
+            return
           } else if (data.status === "review_required") {
             setView("review")
             return
@@ -105,7 +107,7 @@ export default function Home() {
           setFinalizing(false)
           return
         }
-        // Resume polling — backend will continue from build step
+        // Resume polling — backend will progress through "writing" -> "complete".
         setFinalizing(false)
         setView("processing")
       } catch (err) {
@@ -121,20 +123,20 @@ export default function Home() {
       <TopBar />
       {view === "upload" && <StateUpload onJobStarted={onJobStarted} />}
       {view === "processing" && <StateProcessing dealName={dealName} status={status} />}
-      {view === "review" && status?.review && (
+      {view === "review" && status?.review_data && (
         <StateReview
           dealName={dealName}
-          review={status.review}
+          review={status.review_data}
           onCancel={onCancelReview}
           onFinalize={onFinalize}
           finalizing={finalizing}
         />
       )}
-      {view === "complete" && jobId && status?.filename && status?.summary && (
+      {view === "complete" && jobId && status?.result && (
         <StateComplete
           jobId={jobId}
-          filename={status.filename}
-          summary={status.summary}
+          dealName={dealName}
+          result={status.result}
           onReset={reset}
         />
       )}
