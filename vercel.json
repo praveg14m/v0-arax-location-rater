@@ -4,7 +4,8 @@
     "api/*.py": {
       "runtime": "python3.11",
       "maxDuration": 800,
-      "memory": 1024
+      "memory": 1024,
+      "includeFiles": "{lib/python/**,data/**}"
     }
   },
   "rewrites": [

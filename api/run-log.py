@@ -1,6 +1,6 @@
 # api/run-log.py
 # GET /api/run-log?job_id=...
-# Returns text/plain run log. Mock: a few descriptive lines.
+# Returns the full audit log of the job as text/plain.
 
 from __future__ import annotations
 
@@ -32,26 +32,37 @@ class handler(BaseHTTPRequestHandler):
 
         deal = job.get("deal_name", "Unknown")
         created = datetime.fromtimestamp(job["created_at"], tz=timezone.utc).isoformat()
+        audit = job.get("audit_log", [])
+
         lines = [
-            f"Arax Ratings run log — {deal}",
+            f"Arax Location Rater — Run Log",
+            f"=============================",
+            f"Deal:          {deal}",
             f"Job ID:        {job_id}",
             f"Started (UTC): {created}",
             f"Source file:   {job.get('file_name', '?')} ({len(job.get('file_bytes', b''))} bytes)",
+            f"Status:        {job.get('status', '?')}",
             "",
-            "Step 1 — Parsed rent roll: 171 addresses across 9 cities.",
-            "Step 2 — City matching: 5 exact, 3 fuzzy, 1 unmatched.",
-            "Step 3 — Inherited 3 prior adjustments from 2 source deals.",
-            "Step 4 — Walk Score: 28 streets scored, average 62, 2 failures.",
-            "Step 5 — Workbook written with master macros preserved.",
+            "Pipeline audit:",
         ]
+        for entry in audit:
+            lines.append(f"  - {entry}")
+
+        if job.get("status") == "failed":
+            lines.append("")
+            lines.append("Error details:")
+            lines.append(f"  {job.get('error', 'Unknown')}")
+            tb = job.get("traceback")
+            if tb:
+                lines.append("")
+                lines.append("Traceback:")
+                lines.append(tb)
+
         body = ("\n".join(lines) + "\n").encode("utf-8")
 
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.send_header(
-            "Content-Disposition",
-            f'attachment; filename="run-log-{job_id}.txt"',
-        )
+        self.send_header("Content-Disposition", f'attachment; filename="run-log-{job_id}.txt"')
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
