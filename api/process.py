@@ -374,11 +374,18 @@ class handler(BaseHTTPRequestHandler):
             "audit_log": [],
         })
 
-        # Reply BEFORE running the pipeline so the frontend gets a job_id and starts polling
+        # Reply BEFORE running the pipeline so the frontend gets a job_id and starts polling.
+        # The pipeline runs AFTER the response is sent. Vercel keeps the function alive
+        # until do_POST returns - so the pipeline finishes before the function shuts down.
+        # The client connection may close from the frontend's perspective once the
+        # response is flushed, but that's fine - the frontend polls /api/status
+        # for progress and doesn't care that the original POST connection ended.
         _json(self, 200, {"job_id": job_id, "status": "queued"})
-        # Now run the pipeline. The HTTP response above has already been sent;
-        # the Vercel function will stay alive until this returns OR maxDuration.
-        # The frontend's poll loop will see status="parsing" -> ... -> "review_required".
+        try:
+            self.wfile.flush()
+        except Exception:  # noqa: BLE001
+            pass
+
         try:
             _run_pipeline(job_id, deal_name, file_bytes)
         except Exception as e:  # noqa: BLE001
