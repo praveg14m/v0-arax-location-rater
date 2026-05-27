@@ -1,6 +1,21 @@
+# Excel I/O - macro-aware
 openpyxl==3.1.5
+
+# Data manipulation
 pandas==2.2.3
+tabulate==0.9.0          # for df.to_markdown() in the LLM prompt
+
+# HTTP - sync for openpyxl flows, async for Walk Score
 httpx==0.27.2
+
+# Fuzzy matching for city reconciliation
 rapidfuzz==3.10.1
-pydantic==2.9.2
+
+# Multipart upload parser
 python-multipart==0.0.20
+
+# Validation
+pydantic==2.9.2
+
+# Anthropic SDK - column-detection LLM fallback
+anthropic==0.40.0
